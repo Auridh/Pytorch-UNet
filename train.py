@@ -30,7 +30,6 @@ def train_model(
         epochs: int = 5,
         batch_size: int = 1,
         learning_rate: float = 1e-5,
-        val_percent: float = 0.1,
         save_checkpoint: bool = True,
         img_scale: float = 1.0,
         amp: bool = False,
@@ -238,6 +237,5 @@ if __name__ == '__main__':
             learning_rate=args.lr,
             device=device,
             img_scale=args.scale,
-            val_percent=args.val / 100,
             amp=args.amp
         )
