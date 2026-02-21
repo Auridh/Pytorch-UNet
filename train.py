@@ -32,22 +32,23 @@ def train_model(
         learning_rate: float = 1e-5,
         val_percent: float = 0.1,
         save_checkpoint: bool = True,
-        img_scale: float = 0.5,
+        img_scale: float = 1.0,
         amp: bool = False,
         weight_decay: float = 1e-8,
         momentum: float = 0.999,
         gradient_clipping: float = 1.0,
 ):
-    # 1. Create dataset
+    # 1. Create training dataset
     try:
-        dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
+        train_set = CarvanaDataset(Path.join(dir_img, 'train'), Path.join(dir_mask, 'train'), img_scale)
     except (AssertionError, RuntimeError, IndexError):
-        dataset = BasicDataset(dir_img, dir_mask, img_scale)
+        train_set = BasicDataset(Path.join(dir_img, 'train'), Path.join(dir_mask, 'train'), img_scale)
 
-    # 2. Split into train / validation partitions
-    n_val = int(len(dataset) * val_percent)
-    n_train = len(dataset) - n_val
-    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+    # 2. Create validation dataset
+    try:
+        val_set = CarvanaDataset(Path.join(dir_img, 'val'), Path.join(dir_mask, 'val'), img_scale)
+    except (AssertionError, RuntimeError, IndexError):
+        val_set = BasicDataset(Path.join(dir_img, 'val'), Path.join(dir_mask, 'val'), img_scale)
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
@@ -65,8 +66,8 @@ def train_model(
         Epochs:          {epochs}
         Batch size:      {batch_size}
         Learning rate:   {learning_rate}
-        Training size:   {n_train}
-        Validation size: {n_val}
+        Training size:   {len(train_set)}
+        Validation size: {len(val_set)}
         Checkpoints:     {save_checkpoint}
         Device:          {device.type}
         Images scaling:  {img_scale}
@@ -162,7 +163,7 @@ def train_model(
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             state_dict = model.state_dict()
-            state_dict['mask_values'] = dataset.mask_values
+            state_dict['mask_values'] = train_set.mask_values + val_set.mask_values
             torch.save(state_dict, str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
 
@@ -174,13 +175,14 @@ def get_args():
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
-    parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
-    parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
-                        help='Percent of the data that is used as validation (0-100)')
+    parser.add_argument('--scale', '-s', type=float, default=1.0, help='Downscaling factor of the images')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
 
+    parser.add_argument('--img', '-i', dest='img', type=str, default='./data/images', help='Image dataset')
+    parser.add_argument('--mask', '-m', dest='mask', type=str, default='./data/groundTruth', help='Mask dataset')
+    
     return parser.parse_args()
 
 
@@ -201,6 +203,9 @@ if __name__ == '__main__':
                  f'\t{model.n_channels} input channels\n'
                  f'\t{model.n_classes} output channels (classes)\n'
                  f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling')
+
+    dir_img = args.img
+    dir_mask = args.mask
 
     if args.load:
         state_dict = torch.load(args.load, map_location=device)

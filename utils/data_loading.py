@@ -19,6 +19,13 @@ def load_image(filename):
         return Image.fromarray(np.load(filename))
     elif ext in ['.pt', '.pth']:
         return Image.fromarray(torch.load(filename).numpy())
+    elif ext == '.mat':
+        muf = sio.loadmat(filename)
+        mu = muf.get("groundTruth")
+        _, r = mu.shape
+        boundary = mu[0, 0]["Boundaries"][0, 0]
+        boundary = np.array(boundary) * 255
+        return Image.fromarray(boundary)
     else:
         return Image.open(filename)
 
