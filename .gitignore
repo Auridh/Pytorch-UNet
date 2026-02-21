@@ -9,3 +9,4 @@ venv/
 wandb/
 .venv/
 .python-version
+.gpu*
