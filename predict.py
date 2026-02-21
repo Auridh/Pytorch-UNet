@@ -37,8 +37,8 @@ def get_args():
     parser = argparse.ArgumentParser(description='Predict masks from input images')
     parser.add_argument('--model', '-m', default='MODEL.pth', metavar='FILE',
                         help='Specify the file in which the model is stored')
-    parser.add_argument('--input', '-i', metavar='INPUT', nargs='+', help='Folder of input images', required=True)
-    parser.add_argument('--output', '-o', metavar='OUTPUT', nargs='+', help='Folder of output images', default='./output')
+    parser.add_argument('--input', '-i', metavar='INPUT', help='Folder of input images', required=True)
+    parser.add_argument('--output', '-o', metavar='OUTPUT', help='Folder of output images', default='./output')
     parser.add_argument('--viz', '-v', action='store_true',
                         help='Visualize the images as they are processed')
     parser.add_argument('--no-save', '-n', action='store_true', help='Do not save the output masks')
@@ -54,7 +54,7 @@ def get_args():
 
 def get_output_filenames(path, files):
     def _generate_name(fn):
-        return os.path.join(path, f'{os.path.splitext(fn)[0]}_OUT.png')
+        return os.path.join(path, f'{os.path.splitext(os.path.basename(fn))[0]}_OUT.png')
 
     return list(map(_generate_name, files))
 
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     in_files = sorted(
-                   [f for f in os.listdir(os.path.abspath(args.input)) if f.lower().endswith(".jpg")]
+                   [os.path.join(args.input, f) for f in os.listdir(os.path.abspath(args.input)) if f.lower().endswith(".jpg")]
                )
     out_files = get_output_filenames(os.path.abspath(args.output), in_files)
 
