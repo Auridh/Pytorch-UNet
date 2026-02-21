@@ -10,3 +10,4 @@ wandb/
 .venv/
 .python-version
 gpu*
+output/
