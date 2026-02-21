@@ -58,7 +58,7 @@ def train_model(
     experiment = wandb.init(project='U-Net', resume='allow', anonymous='must')
     experiment.config.update(
         dict(epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
-             val_percent=val_percent, save_checkpoint=save_checkpoint, img_scale=img_scale, amp=amp)
+             val_percent=0, save_checkpoint=save_checkpoint, img_scale=img_scale, amp=amp)
     )
 
     logging.info(f'''Starting training:
@@ -85,7 +85,7 @@ def train_model(
     for epoch in range(1, epochs + 1):
         model.train()
         epoch_loss = 0
-        with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
+        with tqdm(total=len(train_set), desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
 
@@ -128,7 +128,7 @@ def train_model(
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
 
                 # Evaluation round
-                division_step = (n_train // (5 * batch_size))
+                division_step = (len(train_set) // (5 * batch_size))
                 if division_step > 0:
                     if global_step % division_step == 0:
                         histograms = {}
