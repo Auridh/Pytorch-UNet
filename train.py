@@ -39,15 +39,15 @@ def train_model(
 ):
     # 1. Create training dataset
     try:
-        train_set = CarvanaDataset(Path.joinpath(dir_img, 'train'), Path.joinpath(dir_mask, 'train'), img_scale)
+        train_set = CarvanaDataset(Path(dir_img).joinpath('train'), Path(dir_mask).joinpath('train'), img_scale)
     except (AssertionError, RuntimeError, IndexError):
-        train_set = BasicDataset(Path.joinpath(dir_img, 'train'), Path.joinpath(dir_mask, 'train'), img_scale)
+        train_set = BasicDataset(Path(dir_img).joinpath('train'), Path(dir_mask).joinpath('train'), img_scale)
 
     # 2. Create validation dataset
     try:
-        val_set = CarvanaDataset(Path.joinpath(dir_img, 'val'), Path.joinpath(dir_mask, 'val'), img_scale)
+        val_set = CarvanaDataset(Path(dir_img).joinpath('val'), Path(dir_mask).joinpath('val'), img_scale)
     except (AssertionError, RuntimeError, IndexError):
-        val_set = BasicDataset(Path.joinpath(dir_img, 'val'), Path.joinpath(dir_mask, 'val'), img_scale)
+        val_set = BasicDataset(Path(dir_img).joinpath('val'), Path(dir_mask).joinpath('val'), img_scale)
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
