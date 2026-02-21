@@ -24,7 +24,7 @@ def load_image(filename):
         muf = sio.loadmat(filename)
         mu = muf.get("groundTruth")
         seg = mu[0, 0]["Segmentation"][0, 0]
-        seg = np.array(seg) * 255
+        seg = np.array(seg)
         return Image.fromarray(seg)
     else:
         return Image.open(filename)
