@@ -23,10 +23,9 @@ def load_image(filename):
     elif ext == '.mat':
         muf = sio.loadmat(filename)
         mu = muf.get("groundTruth")
-        _, r = mu.shape
-        boundary = mu[0, 0]["Boundaries"][0, 0]
-        boundary = np.array(boundary) * 255
-        return Image.fromarray(boundary)
+        seg = mu[0, 0]["Segmentation"][0, 0]
+        seg = np.array(seg) * 255
+        return Image.fromarray(seg)
     else:
         return Image.open(filename)
 
