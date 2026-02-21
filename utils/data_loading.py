@@ -25,9 +25,7 @@ def load_image(filename):
         mu = muf.get("groundTruth")
         seg = mu[0, 0]["Segmentation"][0, 0]
         seg = np.array(seg)
-        seg_vis = (seg - seg.min()) / (seg.max() - seg.min())
-        seg_vis = (seg_vis * 255).astype(np.uint8)
-        return Image.fromarray(seg_vis)
+        return Image.fromarray(seg)
     else:
         return Image.open(filename)
 
