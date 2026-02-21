@@ -12,6 +12,8 @@ from utils.data_loading import BasicDataset
 from unet import UNet
 from utils.utils import plot_img_and_mask
 
+import matplotlib.cm as cm
+
 def predict_img(net,
                 full_img,
                 device,
@@ -73,7 +75,10 @@ def mask_to_image(mask: np.ndarray, mask_values):
     for i, v in enumerate(mask_values):
         out[mask == i] = v
 
-    return Image.fromarray(out)
+    norm = (out - out.min()) / (out.max() - out.min())
+    colored = cm.tab20(norm)[:, :, :3]
+    colored = (colored * 255).astype(np.uint8)
+    return Image.fromarray(colored)
 
 
 if __name__ == '__main__':
