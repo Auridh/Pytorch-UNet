@@ -39,15 +39,15 @@ def train_model(
 ):
     # 1. Create training dataset
     try:
-        train_set = CarvanaDataset(Path(dir_img).joinpath('train'), Path(dir_mask).joinpath('train'), img_scale)
+        train_set = CarvanaDataset(Path(dir_img).joinpath('train'), Path(dir_mask).joinpath('train'), img_scale, mask_dilation=2)
     except (AssertionError, RuntimeError, IndexError):
-        train_set = BasicDataset(Path(dir_img).joinpath('train'), Path(dir_mask).joinpath('train'), img_scale)
+        train_set = BasicDataset(Path(dir_img).joinpath('train'), Path(dir_mask).joinpath('train'), img_scale, mask_dilation=2)
 
     # 2. Create validation dataset
     try:
-        val_set = CarvanaDataset(Path(dir_img).joinpath('val'), Path(dir_mask).joinpath('val'), img_scale, mask_dilation=2)
+        val_set = CarvanaDataset(Path(dir_img).joinpath('val'), Path(dir_mask).joinpath('val'), img_scale)
     except (AssertionError, RuntimeError, IndexError):
-        val_set = BasicDataset(Path(dir_img).joinpath('val'), Path(dir_mask).joinpath('val'), img_scale, mask_dilation=2)
+        val_set = BasicDataset(Path(dir_img).joinpath('val'), Path(dir_mask).joinpath('val'), img_scale)
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
@@ -78,7 +78,15 @@ def train_model(
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
     grad_scaler = torch.amp.GradScaler('cuda', enabled=amp)
-    criterion = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
+    
+    if model.n_classes > 1:
+        weights = torch.ones(model.n_classes, device=device)
+        weights[1] = 10.0
+        criterion = nn.CrossEntropyLoss(weight=weights)
+    else:
+        pos_weight = torch.tensor([10.0], device=device)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
     global_step = 0
 
     # 5. Begin training
