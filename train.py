@@ -18,7 +18,9 @@ from evaluate import evaluate
 from unet import UNet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
+from torchvision.utils import save_image
 
+debug_dir = Path("./debug_batches")
 dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
@@ -96,6 +98,23 @@ def train_model(
         with tqdm(total=len(train_set), desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
+
+                # Nur einmal speichern (z.B. erste Iteration)
+                if epoch == 1 and global_step == 0:
+                    img_cpu = images[0].detach().cpu()
+                    mask_cpu = true_masks[0].detach().cpu().float()
+
+                    # Image speichern
+                    save_image(img_cpu, os.path.join(debug_dir, "input_image.png"))
+
+                    # Maske normalisieren für Sichtbarkeit
+                    mask_vis = mask_cpu.clone()
+                    if mask_vis.max() > 0:
+                        mask_vis = mask_vis / mask_vis.max()
+
+                    save_image(mask_vis.unsqueeze(0), os.path.join(debug_dir, "ground_truth_mask.png"))
+
+                    print("Unique mask values:", torch.unique(true_masks))
 
                 assert images.shape[1] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
@@ -213,6 +232,8 @@ if __name__ == '__main__':
 
     dir_img = args.img
     dir_mask = args.mask
+
+    os.makedirs(debug_dir, exist_ok=True)
 
     if args.load:
         state_dict = torch.load(args.load, map_location=device)

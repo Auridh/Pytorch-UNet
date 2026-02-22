@@ -11,3 +11,4 @@ wandb/
 .python-version
 gpu*
 output/
+debug_batches/

@@ -69,22 +69,34 @@ def get_output_filenames(path, files, suffix=''):
     return list(map(_generate_name, files))
 
 
-def mask_to_image(mask: np.ndarray, mask_values):
+def mask_to_image(mask: np.ndarray, mode: str = "auto"):
     if mask.ndim == 3:
         mask = np.argmax(mask, axis=0)
 
-    out = np.zeros((mask.shape[-2], mask.shape[-1]), dtype=np.uint8)
+    mask = mask.astype(np.int32)
 
-    for i, v in enumerate(mask_values):
-        out[mask == i] = v
+    unique_vals = np.unique(mask)
 
-    if out.max() == out.min():
-        return Image.fromarray(out)
+    if mode == "auto":
+        if len(unique_vals) <= 2:
+            mode = "contour"
+        else:
+            mode = "segmentation"
 
-    norm = (out - out.min()) / (out.max() - out.min())
-    colored = cm.tab20(norm)[:, :, :3]
-    colored = (colored * 255).astype(np.uint8)
-    return Image.fromarray(colored) 
+    if mode == "contour":
+        binary = (mask > 0).astype(np.uint8) * 255
+        return Image.fromarray(binary)
+
+    elif mode == "segmentation":
+        if mask.max() == mask.min():
+            return Image.fromarray(np.zeros_like(mask, dtype=np.uint8))
+
+        norm = (mask - mask.min()) / (mask.max() - mask.min())
+        colored = cm.tab20(norm)[:, :, :3]
+        colored = (colored * 255).astype(np.uint8)
+        return Image.fromarray(colored)
+    else:
+        raise ValueError("mode must be 'auto', 'segmentation' or 'contour'")
 
 
 if __name__ == '__main__':
@@ -122,9 +134,9 @@ if __name__ == '__main__':
 
         if not args.no_save:
             out_filename = out_files[i]
-            mask_to_image(mask, mask_values).save(out_files_bnd[i]) 
+            mask_to_image(mask).save(out_files_bnd[i]) 
             seg_mask, n_objects = contour_to_multiseg(mask)
-            result = mask_to_image(seg_mask, mask_values=list(range(n_objects+1)))
+            result = mask_to_image(seg_mask)
             result.save(out_filename)
             logging.info(f'Mask saved to {out_filename}')
 
