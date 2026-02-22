@@ -13,6 +13,14 @@ from unet import UNet
 from utils.utils import plot_img_and_mask
 
 import matplotlib.cm as cm
+from scipy.ndimage import binary_fill_holes, label
+
+
+def contour_to_multiseg(contour_mask):
+    filled = binary_fill_holes(contour_mask)
+    object_mask = filled & (~contour_mask)
+    labeled, num_features = label(object_mask)
+    return labeled, num_features
 
 def predict_img(net,
                 full_img,
@@ -54,9 +62,9 @@ def get_args():
     return parser.parse_args()
 
 
-def get_output_filenames(path, files):
+def get_output_filenames(path, files, suffix=''):
     def _generate_name(fn):
-        return os.path.join(path, f'{os.path.splitext(os.path.basename(fn))[0]}_OUT.png')
+        return os.path.join(path, f'{os.path.splitext(os.path.basename(fn))[0]}{suffix}_OUT.png')
 
     return list(map(_generate_name, files))
 
@@ -89,6 +97,7 @@ if __name__ == '__main__':
                    [os.path.join(args.input, f) for f in os.listdir(os.path.abspath(args.input)) if f.lower().endswith(".jpg")]
                )
     out_files = get_output_filenames(os.path.abspath(args.output), in_files)
+    out_files_bnd = get_output_filenames(os.path.abspath(args.output), in_files, '_BND')
 
     net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
 
@@ -114,8 +123,12 @@ if __name__ == '__main__':
                            device=device)
 
         if not args.no_save:
+            print(mask, mask.min(), mask.max(), mask_values)
+            continue
             out_filename = out_files[i]
-            result = mask_to_image(mask, mask_values)
+            mask_to_image(mask, mask_values).save(out_files_bnd[i]) 
+            seg_mask, n_objects = contour_to_multiseg(mask)
+            result = mask_to_image(seg_mask, mask_values=list(range(n_objects+1)))
             result.save(out_filename)
             logging.info(f'Mask saved to {out_filename}')
 
