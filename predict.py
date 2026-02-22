@@ -124,7 +124,6 @@ if __name__ == '__main__':
 
         if not args.no_save:
             print(mask, mask.min(), mask.max(), mask_values)
-            continue
             out_filename = out_files[i]
             mask_to_image(mask, mask_values).save(out_files_bnd[i]) 
             seg_mask, n_objects = contour_to_multiseg(mask)
