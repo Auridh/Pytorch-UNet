@@ -70,23 +70,21 @@ def get_output_filenames(path, files, suffix=''):
 
 
 def mask_to_image(mask: np.ndarray, mask_values):
-    if isinstance(mask_values[0], list):
-        out = np.zeros((mask.shape[-2], mask.shape[-1], len(mask_values[0])), dtype=np.uint8)
-    elif mask_values == [0, 1]:
-        out = np.zeros((mask.shape[-2], mask.shape[-1]), dtype=bool)
-    else:
-        out = np.zeros((mask.shape[-2], mask.shape[-1]), dtype=np.uint8)
-
     if mask.ndim == 3:
         mask = np.argmax(mask, axis=0)
+
+    out = np.zeros((mask.shape[-2], mask.shape[-1]), dtype=np.uint8)
 
     for i, v in enumerate(mask_values):
         out[mask == i] = v
 
+    if out.max() == out.min():
+        return Image.fromarray(out)
+
     norm = (out - out.min()) / (out.max() - out.min())
     colored = cm.tab20(norm)[:, :, :3]
     colored = (colored * 255).astype(np.uint8)
-    return Image.fromarray(colored)
+    return Image.fromarray(colored) 
 
 
 if __name__ == '__main__':
@@ -123,7 +121,6 @@ if __name__ == '__main__':
                            device=device)
 
         if not args.no_save:
-            print(mask, mask.min(), mask.max(), mask_values)
             out_filename = out_files[i]
             mask_to_image(mask, mask_values).save(out_files_bnd[i]) 
             seg_mask, n_objects = contour_to_multiseg(mask)
