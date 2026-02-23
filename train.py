@@ -99,22 +99,24 @@ def train_model(
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
 
-                # Nur einmal speichern (z.B. erste Iteration)
-                if epoch == 1 and global_step == 0:
-                    img_cpu = images[0].detach().cpu()
-                    mask_cpu = true_masks[0].detach().cpu().float()
+                if epoch == 1:
+                    for b in range(images.shape[0]):
+                        img_cpu = images[b].detach().cpu()
+                        mask_cpu = true_masks[b].detach().cpu().float()
 
-                    # Image speichern
-                    save_image(img_cpu, os.path.join(debug_dir, "input_image.png"))
+                        img_name = f"epoch{epoch}_step{global_step}_img{b}.png"
+                        mask_name = f"epoch{epoch}_step{global_step}_mask{b}.png"
 
-                    # Maske normalisieren für Sichtbarkeit
-                    mask_vis = mask_cpu.clone()
-                    if mask_vis.max() > 0:
-                        mask_vis = mask_vis / mask_vis.max()
+                        save_image(img_cpu, os.path.join(debug_dir, img_name))
 
-                    save_image(mask_vis.unsqueeze(0), os.path.join(debug_dir, "ground_truth_mask.png"))
+                        if mask_cpu.max() > 0:
+                            mask_vis = mask_cpu / mask_cpu.max()
+                        else:
+                            mask_vis = mask_cpu
 
-                    print("Unique mask values:", torch.unique(true_masks))
+                        save_image(mask_vis.unsqueeze(0), os.path.join(debug_dir, mask_name))   
+
+                    print(f"Unique mask values for epoch{epoch}_step{global_step}_img{b}:", torch.unique(true_masks))
 
                 assert images.shape[1] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
