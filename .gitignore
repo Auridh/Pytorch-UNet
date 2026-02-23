@@ -12,3 +12,4 @@ wandb/
 gpu*
 output/
 debug_batches/
+predictions/
