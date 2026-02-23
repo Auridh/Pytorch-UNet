@@ -26,6 +26,23 @@ dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
 
 
+def compute_pos_weight(loader, device):
+    total_edge = 0
+    total_background = 0
+
+    for batch in loader:
+        labels = batch['mask']  # because your loader returns dict
+        labels = labels.view(-1)
+
+        total_edge += torch.sum(labels == 1).item()
+        total_background += torch.sum(labels == 0).item()
+
+    if total_edge == 0:
+        raise ValueError("No positive pixels found in dataset.")
+
+    pos_weight = total_background / total_edge
+    return torch.tensor([pos_weight], device=device, dtype=torch.float32)
+
 def train_model(
         model,
         device,
@@ -56,6 +73,13 @@ def train_model(
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
+    if model.n_classes == 1:
+        logging.info("Computing positive class weight...")
+        pos_weight = compute_pos_weight(train_loader, device)
+        logging.info(f"Computed pos_weight: {pos_weight.item():.2f}")
+    else:
+        pos_weight = None
+
     # (Initialize logging)
     experiment = wandb.init(project='U-Net', resume='allow', anonymous='must')
     experiment.config.update(
@@ -80,14 +104,13 @@ def train_model(
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
     grad_scaler = torch.amp.GradScaler('cuda', enabled=amp)
-    
+   
     if model.n_classes > 1:
         weights = torch.ones(model.n_classes, device=device)
         weights[1] = 10.0
         criterion = nn.CrossEntropyLoss(weight=weights)
     else:
-        pos_weight = torch.tensor([10.0], device=device)
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight) 
 
     global_step = 0
 
@@ -115,8 +138,6 @@ def train_model(
                             mask_vis = mask_cpu
 
                         save_image(mask_vis.unsqueeze(0), os.path.join(debug_dir, mask_name))   
-
-                    print(f"Unique mask values for epoch{epoch}_step{global_step}_img{b}:", torch.unique(true_masks))
 
                 assert images.shape[1] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
