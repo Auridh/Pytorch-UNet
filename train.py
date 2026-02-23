@@ -25,13 +25,25 @@ dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
 
+def compute_class_weights(loader, device, n_classes=2):
+    counts = torch.zeros(n_classes, device=device)
+    
+    for batch in loader:
+        labels = batch['mask'].view(-1)
+        for c in range(n_classes):
+            counts[c] += torch.sum(labels == c).item()
+    
+    total = counts.sum()
+    weights = total / (counts)
+    weights = weights / weights.sum()
+    return weights
 
 def compute_pos_weight(loader, device):
     total_edge = 0
     total_background = 0
 
     for batch in loader:
-        labels = batch['mask']  # because your loader returns dict
+        labels = batch['mask']
         labels = labels.view(-1)
 
         total_edge += torch.sum(labels == 1).item()
@@ -73,12 +85,13 @@ def train_model(
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
-    if model.n_classes == 1:
-        logging.info("Computing positive class weight...")
+    logging.info("Computing positive class weight...")
+    if model.n_classes == 1: 
         pos_weight = compute_pos_weight(train_loader, device)
         logging.info(f"Computed pos_weight: {pos_weight.item():.2f}")
     else:
-        pos_weight = None
+        pos_weight = compute_class_weights(train_loader, device, n_classes=2)
+        logging.info(f"Class weights: {pos_weight}")
 
     # (Initialize logging)
     experiment = wandb.init(project='U-Net', resume='allow', anonymous='must')
@@ -106,9 +119,7 @@ def train_model(
     grad_scaler = torch.amp.GradScaler('cuda', enabled=amp)
    
     if model.n_classes > 1:
-        weights = torch.ones(model.n_classes, device=device)
-        weights[1] = 10.0
-        criterion = nn.CrossEntropyLoss(weight=weights)
+        criterion = nn.CrossEntropyLoss(weight=pos_weight)
     else:
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight) 
 
