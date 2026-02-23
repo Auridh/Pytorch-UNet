@@ -26,16 +26,15 @@ dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
 
 def compute_class_weights(loader, device, n_classes=2):
-    counts = torch.zeros(n_classes, device=device)
+    counts = torch.zeros(n_classes, device=device, dtype=torch.float32)
     
     for batch in loader:
         labels = batch['mask'].view(-1)
         for c in range(n_classes):
             counts[c] += torch.sum(labels == c).item()
-    
-    total = counts.sum()
-    weights = total / (counts)
-    weights = weights / weights.sum()
+
+    weights = (counts.sum() / counts) * 10
+    weights = torch.clamp(weights, max=500.0)
     return weights
 
 def compute_pos_weight(loader, device):
