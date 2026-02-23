@@ -36,6 +36,10 @@ class ContourDataset(Dataset):
         for m in masks:
             combined = np.logical_or(combined, m)
 
+        # majority vote
+        #combined_mask = np.mean(masks, axis=0)
+        #combined_mask = (combined_mask >= 0.5).astype(np.uint8)
+
         return combined.astype(np.uint8)
 
     def __len__(self):
@@ -135,9 +139,38 @@ class UNet(nn.Module):
         return self.out(d1)
 
 
+def compute_pos_weight(loader, device):
+    total_edge = 0
+    total_background = 0
+
+    for imgs, masks in loader:
+        masks = masks.to(device)
+        masks_flat = masks.view(-1)
+        total_edge += torch.sum(masks_flat == 1).item()
+        total_background += torch.sum(masks_flat == 0).item()
+
+    if total_edge == 0:
+        return torch.tensor(1.0, device=device)
+    return torch.tensor(total_background / total_edge, device=device)
+
+def dice_loss(pred, target, smooth=1e-6):
+    pred = torch.sigmoid(pred)
+    pred_flat = pred.view(-1)
+    target_flat = target.view(-1)
+    intersection = (pred_flat * target_flat).sum()
+    return 1 - (2 * intersection + smooth) / (pred_flat.sum() + target_flat.sum() + smooth)
+
+def weighted_bce_loss(pred, target, pos_weight):
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    return criterion(pred, target)
+
 def train_model(model, train_loader, val_loader, device, epochs, lr):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.BCEWithLogitsLoss()
+    model.to(device)
+
+    # compute positive weight dynamically
+    pos_weight = compute_pos_weight(train_loader, device)
+    print(f"Using pos_weight={pos_weight.item():.2f} for weighted BCE")
 
     best_val = float("inf")
 
@@ -150,18 +183,19 @@ def train_model(model, train_loader, val_loader, device, epochs, lr):
 
             optimizer.zero_grad()
             outputs = model(imgs)
-            loss = criterion(outputs, masks)
+
+            loss = weighted_bce_loss(outputs, masks, pos_weight) + dice_loss(outputs, masks)
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item()
 
         train_loss /= len(train_loader)
+        val_loss = evaluate(model, val_loader, device, pos_weight)
 
-        val_loss = evaluate(model, val_loader, criterion, device)
+        print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
-        print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
-
+        # torch.save(model.state_dict(), f"model_epoch{epoch+1}.pth")
         if val_loss < best_val:
             best_val = val_loss
             torch.save(model.state_dict(), "best_model.pth")
@@ -169,20 +203,18 @@ def train_model(model, train_loader, val_loader, device, epochs, lr):
 
     print("Training complete.")
 
-def evaluate(model, loader, criterion, device):
+@torch.no_grad()
+def evaluate(model, val_loader, device, pos_weight):
     model.eval()
-    loss_total = 0
+    total_loss = 0
+    for imgs, masks in val_loader:
+        imgs, masks = imgs.to(device), masks.to(device)
+        outputs = model(imgs)
+        loss = weighted_bce_loss(outputs, masks, pos_weight) + dice_loss(outputs, masks)
+        total_loss += loss.item()
+    return total_loss / len(val_loader)
 
-    with torch.no_grad():
-        for imgs, masks in loader:
-            imgs, masks = imgs.to(device), masks.to(device)
-            outputs = model(imgs)
-            loss = criterion(outputs, masks)
-            loss_total += loss.item()
-
-    return loss_total / len(loader)
-
-def predict(model, dataset, loader, device, output_dir="predictions"):
+def predict(model, dataset, loader, device, output_dir="predictions", threshold=0.5):
     os.makedirs(output_dir, exist_ok=True)
     model.eval()
 
@@ -190,14 +222,15 @@ def predict(model, dataset, loader, device, output_dir="predictions"):
         for i, (img, mask) in enumerate(loader):
             img = img.to(device)
             output = torch.sigmoid(model(img))
-            pred = (output > 0.5).float()
+            pred = (output > threshold).cpu().numpy()
 
-            # get original filename
+            # original filename
             original_path = dataset.image_paths[i]
             name, _ = os.path.splitext(os.path.basename(original_path))
 
-            mask_img = (pred[0, 0].cpu().numpy() * 255).astype("uint8")
-            Image.fromarray(mask_img).save(os.path.join(output_dir, f"{name}.png"))
+            # contour mask
+            mask_img = (pred[0, 0] * 255).astype(np.uint8)
+            Image.fromarray(mask_img).save(os.path.join(output_dir, f"{name}_bnd.png"))
 
 
 def main(args):
@@ -217,7 +250,7 @@ def main(args):
         train_model(model, train_loader, val_loader, device, args.epochs, args.lr)
 
     model.load_state_dict(torch.load("best_model.pth"))
-    predict(model, test_dataset, test_loader, device, "predictions")
+    predict(model, test_dataset, test_loader, device, "predictions", threshold=args.threshold)
 
 
 if __name__ == "__main__":
@@ -227,6 +260,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--predict", default=False, action='store_true')
+    parser.add_argument("--threshold", default=0.5, type=float)
 
     args = parser.parse_args()
     main(args)
